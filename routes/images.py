@@ -5,7 +5,7 @@ from typing import List
 from config import supabase
 from models import ImageCreate, ImageResponse
 from routes.auth import verify_jwt_token
-from utils import encrypt_data, decrypt_data  # Import the utility functions
+from utils.security import encrypt_data, decrypt_data 
 
 router = APIRouter(prefix="/images", tags=["Images"])
 
