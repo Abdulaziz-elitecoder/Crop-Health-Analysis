@@ -1,0 +1,524 @@
+import streamlit as st
+import requests
+import json
+import io
+import os
+from typing import Optional, Dict, List
+from PIL import Image
+import pandas as pd
+import uuid
+import numpy as np
+import matplotlib.pyplot as plt
+import rasterio
+
+# API endpoint configuration
+API_URL = "http://localhost:8000"  
+
+# Class names for mapping class_idx to labels
+CLASS_NAMES = {0:'Non-Plant', 1:'Unhealthy', 2:'Moderate', 3:'Healthy'}
+
+# Session state management
+def init_session_state():
+    if "access_token" not in st.session_state:
+        st.session_state.access_token = None
+    if "user_id" not in st.session_state:
+        st.session_state.user_id = None
+    if "is_authenticated" not in st.session_state:
+        st.session_state.is_authenticated = False
+    if "current_page" not in st.session_state:
+        st.session_state.current_page = "login"
+    if "images" not in st.session_state:
+        st.session_state.images = []
+    if "selected_image" not in st.session_state:
+        st.session_state.selected_image = None
+
+def set_authenticated(user_id: str, access_token: str, refresh_token: str):
+    st.session_state.user_id = user_id
+    st.session_state.access_token = access_token
+    st.session_state.refresh_token = refresh_token
+    st.session_state.is_authenticated = True
+    st.session_state.current_page = "dashboard"
+
+def clear_authentication():
+    st.session_state.user_id = None
+    st.session_state.access_token = None
+    st.session_state.refresh_token = None
+    st.session_state.is_authenticated = False
+    st.session_state.current_page = "login"
+    st.session_state.images = []
+    st.session_state.selected_image = None
+
+# API interaction functions
+def signup_user(email: str, password: str) -> Optional[dict]:
+    try:
+        response = requests.post(
+            f"{API_URL}/auth/signup",
+            params={"email": email, "password": password}
+        )
+        if response.status_code == 200:
+            return response.json()
+        else:
+            st.error(f"Signup failed: {response.json().get('detail', 'Unknown error')}")
+            return None
+    except Exception as e:
+        st.error(f"Error connecting to API: {str(e)}")
+        return None
+
+
+def signin_user(email: str, password: str) -> Optional[dict]:
+    try:
+        response = requests.post(
+            f"{API_URL}/auth/signin",
+            params={"email": email, "password": password}
+        )
+        if response.status_code == 200:
+            return response.json()
+        else:
+            st.error(f"Login failed: {response.json().get('detail', 'Unknown error')}")
+            return None
+    except Exception as e:
+        st.error(f"Error connecting to API: {str(e)}")
+        return None
+
+def logout_user(access_token: str) -> bool:
+    try:
+        response = requests.post(
+            f"{API_URL}/auth/logout",
+            params={"access_token": access_token}
+        )
+        if response.status_code == 200:
+            return True
+        else:
+            st.error(f"Logout failed: {response.json().get('detail', 'Unknown error')}")
+            return False
+    except Exception as e:
+        st.error(f"Error connecting to API: {str(e)}")
+        return False
+
+def get_auth_headers():
+    return {"Authorization": f"Bearer {st.session_state.access_token}"}
+
+def upload_image(file, metadata=None):
+    try:
+        files = {"file": (file.name, file.getvalue(), file.type)}
+        data = {"user_id": st.session_state.user_id}
+        if metadata:
+            data["metadata"] = json.dumps(metadata)
+        
+        response = requests.post(
+            f"{API_URL}/images/?user_id={st.session_state.user_id}",
+            headers=get_auth_headers(),
+            files=files,
+            data=data
+        )
+        
+        if response.status_code == 200:
+            return response.json()
+        else:
+            st.error(f"Upload failed: {response.json().get('detail', 'Unknown error')}")
+            return None
+    except Exception as e:
+        st.error(f"Error uploading image: {str(e)}")
+        return None
+
+def get_all_images():
+    try:
+        response = requests.get(
+            f"{API_URL}/images/?user_id={st.session_state.user_id}",
+            headers=get_auth_headers()
+        )
+        
+        if response.status_code == 200:
+            return response.json()
+        else:
+            st.error(f"Failed to retrieve images: {response.json().get('detail', 'Unknown error')}")
+            return []
+    except Exception as e:
+        st.error(f"Error retrieving images: {str(e)}")
+        return []
+
+def get_image_by_id(image_id):
+    try:
+        response = requests.get(
+            f"{API_URL}/images/{image_id}?user_id={st.session_state.user_id}",
+            headers=get_auth_headers()
+        )
+        
+        if response.status_code == 200:
+            return response.json()
+        else:
+            st.error(f"Failed to retrieve image: {response.json().get('detail', 'Unknown error')}")
+            return None
+    except Exception as e:
+        st.error(f"Error retrieving image: {str(e)}")
+        return None
+
+def delete_image(image_id):
+    try:
+        response = requests.delete(
+            f"{API_URL}/images/{image_id}?user_id={st.session_state.user_id}",
+            headers=get_auth_headers()
+        )
+        
+        if response.status_code == 200:
+            return True
+        else:
+            st.error(f"Failed to delete image: {response.json().get('detail', 'Unknown error')}")
+            return False
+    except Exception as e:
+        st.error(f"Error deleting image: {str(e)}")
+        return False
+
+def classify_image(image_id):
+    try:
+        response = requests.post(
+            f"{API_URL}/classifications/{image_id}?user_id={st.session_state.user_id}",
+            headers=get_auth_headers()
+        )
+        
+        if response.status_code == 200:
+            return response.json()
+        else:
+            st.error(f"Classification failed: {response.json().get('detail', 'Unknown error')}")
+            return None
+    except Exception as e:
+        st.error(f"Error classifying image: {str(e)}")
+        return None
+
+def get_classification_result(image_id):
+    try:
+        response = requests.get(
+            f"{API_URL}/classifications/{image_id}/result?user_id={st.session_state.user_id}",
+            headers=get_auth_headers()
+        )
+        
+        if response.status_code == 200:
+            return response.json()
+        else:
+            return None
+    except Exception as e:
+        st.error(f"Error retrieving classification: {str(e)}")
+        return None
+
+# UI Components
+def render_login_page():
+    st.title("Crop Health Analysis")
+    st.subheader("Login to your account")
+    
+    tab1, tab2 = st.tabs(["Sign In", "Sign Up"])
+    
+    with tab1:
+        with st.form("signin_form"):
+            email = st.text_input("Email", key="signin_email")
+            password = st.text_input("Password", type="password", key="signin_password")
+            submit_button = st.form_submit_button("Sign In")
+            
+            if submit_button:
+                if not email or not password:
+                    st.error("Please fill in all fields")
+                else:
+                    user_data = signin_user(email, password)
+                    if user_data:
+                        set_authenticated(
+                            user_data["user_id"], 
+                            user_data["access_token"],
+                            user_data["refresh_token"]
+                        )
+                        st.rerun()
+    
+    with tab2:
+        with st.form("signup_form"):
+            email = st.text_input("Email", key="signup_email")
+            password = st.text_input("Password", type="password", key="signup_password")
+            confirm_password = st.text_input("Confirm Password", type="password")
+            submit_button = st.form_submit_button("Sign Up")
+            
+            if submit_button:
+                if not email or not password or not confirm_password:
+                    st.error("Please fill in all fields")
+                elif password != confirm_password:
+                    st.error("Passwords do not match")
+                else:
+                    user_data = signup_user(email, password)
+                    if user_data:
+                        st.success("Account created successfully! You can now sign in.")
+                        set_authenticated(
+                            user_data["user_id"], 
+                            user_data["access_token"],
+                            user_data["refresh_token"]
+                        )
+                        st.rerun()
+
+def render_dashboard():
+    st.title("Crop Health Analysis Dashboard")
+    
+    # Sidebar navigation
+    with st.sidebar:
+        st.subheader("Navigation")
+        page = st.radio("Go to", ["Upload Image", "My Images", "Account"])
+        
+        st.divider()
+        if st.button("Logout"):
+            if logout_user(st.session_state.access_token):
+                clear_authentication()
+                st.rerun()
+    
+    # Main content based on selected page
+    if page == "Upload Image":
+        render_upload_page()
+    elif page == "My Images":
+        render_images_page()
+    elif page == "Account":
+        render_account_page()
+
+def render_upload_page():
+    st.header("Upload New Image")
+    
+    # File uploader
+    uploaded_file = st.file_uploader("Choose an image file", type=["jpg", "jpeg", "png", "tif", "tiff"])
+    
+    # Metadata form
+    with st.expander("Image Metadata (Optional)"):
+        col1, col2 = st.columns(2)
+        with col1:
+            location = st.text_input("Location")
+            crop_type = st.text_input("Crop Type")
+        with col2:
+            capture_date = st.date_input("Capture Date")
+            is_rgb = st.checkbox("Is RGB Image", value=True)
+    
+    # Image type selection
+    image_type = st.radio("Image Type", ["RGB", "NDVI"], horizontal=True)
+    
+    if uploaded_file is not None:
+        # Display preview
+        st.subheader("Preview")
+        try:
+            image = Image.open(uploaded_file)
+            st.image(image, caption="Uploaded Image", use_container_width=True)
+        except Exception as e:
+            st.warning(f"Cannot preview this image format: {str(e)}")
+            st.info("NDVI images may not be previewable, but can still be uploaded.")
+        
+        # Reset file pointer
+        uploaded_file.seek(0)
+        
+        # Upload button
+        if st.button("Upload Image"):
+            # Prepare metadata
+            metadata = {
+                "location": location,
+                "crop_type": crop_type,
+                "capture_date": str(capture_date),
+                "is_rgb": image_type == "RGB",
+                "image_type": image_type.lower()
+            }
+            
+            # Upload image
+            with st.spinner("Uploading..."):
+                result = upload_image(uploaded_file, metadata)
+                if result:
+                    st.success("Image uploaded successfully!")
+                    st.json(result)
+                    # Refresh images list
+                    st.session_state.images = get_all_images()
+
+def render_images_page():
+    st.header("My Images")
+    
+    # Refresh button
+    if st.button("Refresh Images"):
+        st.session_state.images = get_all_images()
+    
+    # Get images if not already loaded
+    if not st.session_state.images:
+        with st.spinner("Loading images..."):
+            st.session_state.images = get_all_images()
+    
+    # Display images
+    if not st.session_state.images:
+        st.info("No images found. Upload some images first!")
+    else:
+        # Create a dataframe for better display
+        image_data = []
+        for img in st.session_state.images:
+            # Extract metadata
+            metadata = img.get("metadata", {})
+            image_data.append({
+                "ID": img["id"],
+                "Type": img.get("file_type", "Unknown"),
+                "Crop Type": metadata.get("crop_type", ""),
+                "Location": metadata.get("location", ""),
+                "Date": metadata.get("capture_date", ""),
+                "Uploaded": img.get("created_at", "")[:10]  # Just the date part
+            })
+        
+        # Convert to dataframe
+        df = pd.DataFrame(image_data)
+        
+        # Use AgGrid or similar for better interaction if available
+        st.dataframe(df, use_container_width=True, height=300)
+        
+        # Image selection
+        selected_id = st.selectbox("Select an image to view details", 
+                                  options=[img["id"] for img in st.session_state.images],
+                                  format_func=lambda x: f"Image {x[:8]}...")
+        
+        if selected_id:
+            # Find the selected image
+            selected_image = next((img for img in st.session_state.images if img["id"] == selected_id), None)
+            if selected_image:
+                st.session_state.selected_image = selected_image
+                
+                # Display image details
+                col1, col2 = st.columns([2, 1])
+                
+                with col1:
+                    st.subheader("Image Preview")
+                    try:
+                        # Download the image content
+                        image_url = selected_image["image_url"]
+                        file_type = selected_image.get("file_type", "rgb")
+                        image_response = requests.get(image_url)
+                        if image_response.status_code == 200:
+                            image_content = image_response.content
+                            
+                            # Get classification result for the title
+                            classification = get_classification_result(selected_id)
+                            title = "Image Preview"
+                            if classification:
+                                result = classification["classification"]
+                                confidence = classification["confidence"]
+                                class_idx = 0 if result == "unhealthy" else 1
+                                title = f"{CLASS_NAMES[class_idx]} ({confidence:.1%})"
+                            
+                            # Display based on file_type
+                            if file_type == "ndvi":
+                                # NDVI image (TIFF)
+                                with io.BytesIO(image_content) as f:
+                                    with rasterio.open(f) as src:
+                                        data = src.read()  # Shape: (bands, height, width)
+                                ndvi_display = data[0, :, :] if data.ndim == 3 else data[:, :]
+                                fig, ax = plt.subplots()
+                                im = ax.imshow(ndvi_display, cmap='RdYlGn', vmin=-1, vmax=1)
+                                plt.colorbar(im, label="NDVI")
+                                ax.set_title(title)
+                                st.pyplot(fig)
+                            else:
+                                # RGB image (JPEG/PNG)
+                                image = Image.open(io.BytesIO(image_content))
+                                fig, ax = plt.subplots()
+                                ax.imshow(np.array(image))
+                                ax.set_title(title)
+                                ax.axis('off')
+                                st.pyplot(fig)
+                        else:
+                            st.warning(f"Failed to download image: {image_response.status_code}")
+                    except Exception as e:
+                        st.warning(f"Cannot preview this image: {str(e)}")
+                
+                with col2:
+                    st.subheader("Image Details")
+                    metadata = selected_image.get("metadata", {})
+                    st.write(f"**Type:** {selected_image.get('file_type', 'Unknown')}")
+                    st.write(f"**Crop Type:** {metadata.get('crop_type', 'Not specified')}")
+                    st.write(f"**Location:** {metadata.get('location', 'Not specified')}")
+                    st.write(f"**Date:** {metadata.get('capture_date', 'Not specified')}")
+                    
+                    # Classification section
+                    st.divider()
+                    st.subheader("Classification")
+                    
+                    # Check if classification exists
+                    classification = get_classification_result(selected_id)
+                    
+                    if classification:
+                        # Display classification result
+                        result = classification["classification"]
+                        confidence = classification["confidence"]
+                        
+                        # Color based on health status
+                        if result == "healthy":
+                            st.success(f"Status: Healthy (Confidence: {confidence:.2f})")
+                        else:
+                            st.error(f"Status: Unhealthy (Confidence: {confidence:.2f})")
+                        
+                        st.write(f"Classified on: {classification['created_at'][:10]}")
+                    else:
+                        st.info("This image has not been classified yet.")
+                        if st.button("Classify Image"):
+                            with st.spinner("Classifying..."):
+                                result = classify_image(selected_id)
+                                if result:
+                                    st.success("Classification complete!")
+                                    st.rerun()
+                
+                # Actions
+                st.divider()
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("Delete Image"):
+                        if delete_image(selected_id):
+                            st.success("Image deleted successfully!")
+                            # Refresh images list
+                            st.session_state.images = get_all_images()
+                            st.session_state.selected_image = None
+                            st.rerun()
+
+def render_account_page():
+    st.header("Account Information")
+    
+    # Display user info
+    st.subheader("User Details")
+    st.write(f"**User ID:** {st.session_state.user_id}")
+    
+    # Token information in an expander
+    with st.expander("Session Information"):
+        st.json({
+            "user_id": st.session_state.user_id,
+            "access_token": st.session_state.access_token[:20] + "..." if st.session_state.access_token else None,
+            "is_authenticated": st.session_state.is_authenticated
+        })
+    
+    # Usage statistics
+    st.subheader("Usage Statistics")
+    image_count = len(st.session_state.images) if st.session_state.images else 0
+    st.metric("Total Images", image_count)
+    
+    # Account actions
+    st.divider()
+    st.subheader("Account Actions")
+    if st.button("Logout", key="account_logout"):
+        if logout_user(st.session_state.access_token):
+            clear_authentication()
+            st.rerun()
+
+# Main app
+def main():
+    st.set_page_config(
+        page_title="Crop Health Analysis", 
+        page_icon="🌱", 
+        layout="wide",
+        initial_sidebar_state="expanded"
+    )
+    
+    # Add custom CSS
+    st.markdown("""
+    <style>
+    .main .block-container {
+        padding-top: 2rem;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    # Initialize session state
+    init_session_state()
+    
+    # Render appropriate page based on authentication status
+    if st.session_state.is_authenticated:
+        render_dashboard()
+    else:
+        render_login_page()
+
+if __name__ == "__main__":
+    main()
