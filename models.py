@@ -1,13 +1,12 @@
-# models.py
 from pydantic import BaseModel, EmailStr
 from uuid import UUID
 from typing import Optional, Dict, Any
 from datetime import datetime
 
-# Authentication Models
 class Token(BaseModel):
     access_token: str
     token_type: str
+    refresh_token: str = None 
 
 class UserSignUp(BaseModel):
     email: EmailStr
@@ -16,33 +15,28 @@ class UserSignUp(BaseModel):
 class UserSignIn(BaseModel):
     email: EmailStr
     password: str
-
-# Existing Models (updated to reference auth.users)
-# # User Models
+    
 class UserCreate(BaseModel):
     email: EmailStr
     password: str
 
 class UserResponse(BaseModel):
     id: UUID
-    auth_user_id: UUID  # Add this to match the table
+    auth_user_id: UUID 
     email: EmailStr
     created_at: datetime
 
     class Config:
         from_attributes = True
-
 class ImageCreate(BaseModel):
-    user_id: UUID  # This will now reference auth.users(id)
-    image_url: str
     metadata: Optional[Dict[str, Any]] = None
 
 class ImageResponse(BaseModel):
-    id: UUID
-    user_id: UUID
+    id: str
+    user_id: str
     image_url: str
-    metadata: Optional[Dict[str, Any]]
-    uploaded_at: datetime
+    metadata: Optional[Dict[str, Any]] = None
+    created_at: str
 
     class Config:
         from_attributes = True
@@ -62,8 +56,12 @@ class ClassificationResponse(BaseModel):
     class Config:
         from_attributes = True
 
+class PredictionResponse(BaseModel):
+    class_name: str
+    confidence: float
+
 class LogCreate(BaseModel):
-    user_id: UUID  # This will now reference auth.users(id)
+    user_id: UUID 
     action: str
     details: Optional[Dict[str, Any]] = None
 
