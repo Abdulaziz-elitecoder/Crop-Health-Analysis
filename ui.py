@@ -32,9 +32,10 @@ def init_session_state():
     if "selected_image" not in st.session_state:
         st.session_state.selected_image = None
 
-def set_authenticated(user_id: str, access_token: str, refresh_token: str):
+def set_authenticated(user_id: str, access_token: str, refresh_token: str, email: str):
     st.session_state.user_id = user_id
     st.session_state.access_token = access_token
+    st.session_state.email = email
     st.session_state.refresh_token = refresh_token
     st.session_state.is_authenticated = True
     st.session_state.current_page = "dashboard"
@@ -43,6 +44,7 @@ def clear_authentication():
     st.session_state.user_id = None
     st.session_state.access_token = None
     st.session_state.refresh_token = None
+    st.session_state.email = None
     st.session_state.is_authenticated = False
     st.session_state.current_page = "login"
     st.session_state.images = []
@@ -222,7 +224,8 @@ def render_login_page():
                         set_authenticated(
                             user_data["user_id"], 
                             user_data["access_token"],
-                            user_data["refresh_token"]
+                            user_data["refresh_token"],
+                            email
                         )
                         st.rerun()
     
@@ -283,9 +286,6 @@ def render_upload_page():
         with col1:
             location = st.text_input("Location")
             crop_type = st.text_input("Crop Type")
-        with col2:
-            capture_date = st.date_input("Capture Date")
-            is_rgb = st.checkbox("Is RGB Image", value=True)
     
     # Image type selection
     image_type = st.radio("Image Type", ["RGB", "NDVI"], horizontal=True)
@@ -309,8 +309,6 @@ def render_upload_page():
             metadata = {
                 "location": location,
                 "crop_type": crop_type,
-                "capture_date": str(capture_date),
-                "is_rgb": image_type == "RGB",
                 "image_type": image_type.lower()
             }
             
@@ -349,7 +347,6 @@ def render_images_page():
                 "Type": img.get("file_type", "Unknown"),
                 "Crop Type": metadata.get("crop_type", ""),
                 "Location": metadata.get("location", ""),
-                "Date": metadata.get("capture_date", ""),
                 "Uploaded": img.get("created_at", "")[:10]  # Just the date part
             })
         
@@ -471,6 +468,7 @@ def render_account_page():
     # Display user info
     st.subheader("User Details")
     st.write(f"**User ID:** {st.session_state.user_id}")
+    st.write(f"**Email:** {st.session_state.email}")
     
     # Token information in an expander
     with st.expander("Session Information"):
