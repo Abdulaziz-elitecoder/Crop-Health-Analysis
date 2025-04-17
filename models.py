@@ -41,6 +41,7 @@ class ImageResponse(BaseModel):
     class Config:
         from_attributes = True
 
+
 class ClassificationCreate(BaseModel):
     image_id: UUID
     ndvi_value: float

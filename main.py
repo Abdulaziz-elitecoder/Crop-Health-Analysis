@@ -10,7 +10,7 @@ async def lifespan(app: FastAPI):
         print("Model loaded successfully")
     except Exception as e:
         print(f"Failed to load model: {str(e)}")
-        raise  # Re-raise the exception to stop the app if model loading fails
+        raise 
     yield
     print("Shutting down application")
 

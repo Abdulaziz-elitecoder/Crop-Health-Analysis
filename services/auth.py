@@ -1,4 +1,3 @@
-# services/auth.py
 from database.supabase import get_supabase
 from pydantic import EmailStr
 from uuid import UUID
