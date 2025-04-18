@@ -16,8 +16,8 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy the requirements file and install Python dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# COPY requirements.txt .
+# RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the necessary backend files into the container
 # COPY main.py .
@@ -39,7 +39,15 @@ RUN apt-get update && apt-get install -y curl \
 # Since Railway clones the repo, we need to ensure Git LFS files are fetched
 # Railway builds from the repo directly, so we simulate the LFS fetch in the build context
 WORKDIR /app
-COPY . .
+COPY main.py .
+COPY routers/ routers/
+COPY services/ services/
+COPY utils/ utils/
+COPY models.py .
+COPY model/ model/
+COPY database/ database/
+COPY .env .
+COPY config.py .
 RUN git lfs install && git lfs pull
 
 # Install Python dependencies
