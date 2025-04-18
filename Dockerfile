@@ -12,6 +12,7 @@ RUN apt-get update && apt-get install -y \
     gfortran \
     libjpeg-dev \
     zlib1g-dev \
+    libgl1-mesa-glx \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy the requirements file and install Python dependencies
