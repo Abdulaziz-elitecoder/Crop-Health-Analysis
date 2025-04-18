@@ -33,7 +33,7 @@ RUN git clone https://github.com/Abdulaziz-elitecoder/Crop-Health-Analysis.git /
 
 # Install Python dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r backend-requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Debug: List the contents of the model/ directory to verify the file is present
 RUN ls -la model/
