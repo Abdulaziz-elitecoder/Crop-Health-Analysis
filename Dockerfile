@@ -35,6 +35,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 ENV CUDA_VISIBLE_DEVICES=""
 ENV TF_CPP_MIN_LOG_LEVEL="2"
+ENV TF_ENABLE_ONEDNN_OPTS="0"
 
 # Debug: List the contents of the model/ directory to verify the file is present
 RUN ls -la model/
