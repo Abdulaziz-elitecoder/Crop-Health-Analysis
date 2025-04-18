@@ -12,35 +12,24 @@ RUN apt-get update && apt-get install -y \
     gfortran \
     libjpeg-dev \
     zlib1g-dev \
-    # libgl1-mesa-glx \
+    libglib2.0-0 \
+    git \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy the requirements file and install Python dependencies
-# COPY requirements.txt .
-# RUN pip install --no-cache-dir -r requirements.txt
+# Install gnupg and Git LFS
+RUN apt-get update && apt-get install -y gnupg \
+    && curl -s https://packagecloud.io/install/repositories/github/git-lfs/script.deb.sh | bash \
+    && apt-get install -y git-lfs \
+    && rm -rf /var/lib/apt/lists/*
 
-# Copy the necessary backend files into the container
-# COPY main.py .
-# COPY routers/ routers/
-# COPY services/ services/
-# COPY utils/ utils/
-# COPY models.py .
-# COPY model/ model/
-# COPY database/ database/
-# COPY .env .
-# COPY config.py .
-
-# Railway builds from the repo directly, so we simulate the LFS fetch in the build context
-WORKDIR /app
-COPY main.py .
-COPY routers/ routers/
-COPY services/ services/
-COPY utils/ utils/
-COPY models.py .
-COPY model/ model/
-COPY database/ database/
-COPY .env .
-COPY config.py .
+# Clone the repository and fetch Git LFS files
+RUN git clone https://github.com/Abdulaziz-elitecoder/Crop-Health-Analysis.git /tmp/repo \
+    && cd /tmp/repo \
+    && git lfs install \
+    && git lfs pull \
+    && mv /tmp/repo/* /app/ \
+    && rm -rf /tmp/repo
 
 # Install Python dependencies
 COPY requirements.txt .
