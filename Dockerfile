@@ -33,6 +33,8 @@ RUN git clone https://github.com/Abdulaziz-elitecoder/Crop-Health-Analysis.git /
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+
+RUN mkdir -p model/
 ENV CUDA_VISIBLE_DEVICES=""
 ENV TF_CPP_MIN_LOG_LEVEL="2"
 ENV TF_ENABLE_ONEDNN_OPTS="0"
