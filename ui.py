@@ -14,9 +14,6 @@ import rasterio
 # API endpoint configuration
 API_URL = "http://localhost:8000"  
 
-# Class names for mapping class_idx to labels
-CLASS_NAMES = {0:'Non-Plant', 1:'Unhealthy', 2:'Moderate', 3:'Healthy'}
-
 # Session state management
 def init_session_state():
     if "access_token" not in st.session_state:
@@ -278,7 +275,7 @@ def render_upload_page():
     st.header("Upload New Image")
     
     # File uploader
-    uploaded_file = st.file_uploader("Choose an image file", type=["jpg", "jpeg", "png", "tif", "tiff"])
+    uploaded_file = st.file_uploader("Choose an image file", type=["jpg", "jpeg", "png", "tif", "tiff","npy"])
     
     # Metadata form
     with st.expander("Image Metadata (Optional)"):
@@ -345,7 +342,6 @@ def render_images_page():
             image_data.append({
                 "ID": img["id"],
                 "Type": img.get("file_type", "Unknown"),
-                "Crop Type": metadata.get("crop_type", ""),
                 "Location": metadata.get("location", ""),
                 "Uploaded": img.get("created_at", "")[:10]  # Just the date part
             })
@@ -386,8 +382,7 @@ def render_images_page():
                             if classification:
                                 result = classification["classification"]
                                 confidence = classification["confidence"]
-                                class_idx = 0 if result == "unhealthy" else 1
-                                title = f"{CLASS_NAMES[class_idx]} ({confidence:.1%})"
+                                title = f"{result} ({confidence:.1%})"
                             
                             # Display based on file_type
                             if file_type == "ndvi":
@@ -418,7 +413,6 @@ def render_images_page():
                     st.subheader("Image Details")
                     metadata = selected_image.get("metadata", {})
                     st.write(f"**Type:** {selected_image.get('file_type', 'Unknown')}")
-                    st.write(f"**Crop Type:** {metadata.get('crop_type', 'Not specified')}")
                     st.write(f"**Location:** {metadata.get('location', 'Not specified')}")
                     st.write(f"**Date:** {metadata.get('capture_date', 'Not specified')}")
                     
@@ -435,10 +429,10 @@ def render_images_page():
                         confidence = classification["confidence"]
                         
                         # Color based on health status
-                        if result == "healthy":
-                            st.success(f"Status: Healthy (Confidence: {confidence:.2f})")
+                        if (result != "Unhealthy" or result != "Non-Plant"):
+                            st.success(f"Status: {result} (Confidence: {confidence:.2f})")
                         else:
-                            st.error(f"Status: Unhealthy (Confidence: {confidence:.2f})")
+                            st.error(f"Status: {result} (Confidence: {confidence:.2f})")
                         
                         st.write(f"Classified on: {classification['created_at'][:10]}")
                     else:

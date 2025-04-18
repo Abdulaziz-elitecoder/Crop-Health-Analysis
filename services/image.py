@@ -15,7 +15,7 @@ async def create_image(user_id: UUID, file: UploadFile, metadata: Dict[str, Any]
     
     # Determine file_type (rgb or ndvi)
     file_type = "rgb"
-    if file.content_type == "image/tiff":
+    if file.content_type == "image/tiff" or file.content_type == "image/npy":
         # For TIFF files, assume NDVI unless metadata indicates otherwise
         file_type = "ndvi"  # Default to NDVI for TIFF
         if metadata and metadata.get("is_rgb", False):
@@ -85,9 +85,9 @@ async def delete_image(image_id: UUID) -> None:
         raise ValueError("Image not found")
     
     image_data = response.data[0]
+    print(image_data["image_url"])
     file_path = image_data["image_url"].split("images/")[-1]
     await supabase.storage.from_("images").remove([file_path])
-    
     await supabase.table("images").delete().eq("id", str(image_id)).execute()
 
 async def view_images(user_id: UUID) -> List[dict]:

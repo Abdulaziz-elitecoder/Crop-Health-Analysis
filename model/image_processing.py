@@ -25,15 +25,17 @@ def preprocess_image(img_rgb):
     # Stack to 3 channels
     return np.stack([resized]*3, axis=-1)
 
-def preprocess_ndvi(uploaded_file):
+async def preprocess_ndvi(uploaded_file):
     with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
-        tmp_file.write(uploaded_file.read())
+        # Await the read operation since uploaded_file.read() is async
+        content = await uploaded_file.read()
+        tmp_file.write(content)
         tmp_file_path = tmp_file.name
 
     try:
-        if uploaded_file.name.lower().endswith('.npy'):
+        if uploaded_file.filename.lower().endswith('.npy'):
             ndvi = np.load(tmp_file_path)
-        elif uploaded_file.name.lower().endswith(('.tif', '.tiff')):
+        elif uploaded_file.filename.lower().endswith(('.tif', '.tiff')):
             with rasterio.open(tmp_file_path) as src:
                 ndvi = src.read(1).astype(np.float32)
         
