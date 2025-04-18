@@ -13,8 +13,6 @@ RUN apt-get update && apt-get install -y \
     libjpeg-dev \
     zlib1g-dev \
     libglib2.0-0 \
-    git \
-    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Install gnupg and Git LFS
@@ -34,6 +32,9 @@ RUN git clone https://github.com/Abdulaziz-elitecoder/Crop-Health-Analysis.git /
 # Install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+
+ENV CUDA_VISIBLE_DEVICES=""
+ENV TF_CPP_MIN_LOG_LEVEL="2"
 
 # Debug: List the contents of the model/ directory to verify the file is present
 RUN ls -la model/
