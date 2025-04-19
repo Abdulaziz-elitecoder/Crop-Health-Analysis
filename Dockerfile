@@ -9,6 +9,7 @@ RUN apt-get update && apt-get install -y \
     libgeos-dev \
     libgdal-dev \
     libatlas-base-dev \
+    build-essential \
     gfortran \
     libjpeg-dev \
     zlib1g-dev \
@@ -32,12 +33,6 @@ RUN git clone https://github.com/Abdulaziz-elitecoder/Crop-Health-Analysis.git /
 # Install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-
-
-RUN mkdir -p model/
-ENV CUDA_VISIBLE_DEVICES=""
-ENV TF_CPP_MIN_LOG_LEVEL="2"
-ENV TF_ENABLE_ONEDNN_OPTS="0"
 
 # Debug: List the contents of the model/ directory to verify the file is present
 RUN ls -la model/

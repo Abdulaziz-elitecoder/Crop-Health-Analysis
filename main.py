@@ -5,14 +5,16 @@ from contextlib import asynccontextmanager
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    print("Inside lifespan - before loading model")
     try:
-        load_model_wrapper() 
+        load_model_wrapper()
         print("Model loaded successfully")
     except Exception as e:
         print(f"Failed to load model: {str(e)}")
         raise 
+    print("Yielding from lifespan")
     yield
-    print("Shutting down application")
+    print("Lifespan shutdown")
 
 app = FastAPI(
     title="Crop Health Analysis Backend",
