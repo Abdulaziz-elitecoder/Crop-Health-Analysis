@@ -2,53 +2,80 @@ import numpy as np
 import cv2
 import rasterio
 import tempfile
-import tensorflow as tf
+import os
+from rasterio.crs import CRS
 
 def rgb_to_vari(img):
-    """Calculate VARI from RGB image"""
-    r = img[:,:,0].astype(np.float32)
-    g = img[:,:,1].astype(np.float32)
-    b = img[:,:,2].astype(np.float32)
-    
+    """Calculate VARI from RGB image."""
+    r = img[:, :, 0].astype(np.float32)
+    g = img[:, :, 1].astype(np.float32)
+    b = img[:, :, 2].astype(np.float32)
+
     denominator = r + g - b
     denominator[denominator == 0] = 1e-10  # Avoid division by zero
-    
+
     vari = (g - r) / denominator
-    return np.clip(vari, -1, 1)  # Ensure valid range
+    return np.clip(vari, -1, 1)
 
 def preprocess_image(img_rgb):
-    """Process RGB images to match model input requirements"""
-    # Convert to VARI and resize
+    """Convert RGB image to VARI, resize, and format for model."""
     vari = rgb_to_vari(img_rgb)
     resized = cv2.resize(vari, (299, 299))
-    
-    # Stack to 3 channels
-    return np.stack([resized]*3, axis=-1)
+    return np.stack([resized] * 3, axis=-1)
 
-async def preprocess_ndvi(uploaded_file):
-    with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
-        # Await the read operation since uploaded_file.read() is async
-        content = await uploaded_file.read()
-        tmp_file.write(content)
-        tmp_file_path = tmp_file.name
+def get_geodata(file_path):
+    """Extract geospatial metadata from GeoTIFF."""
+    try:
+        with rasterio.open(file_path) as src:
+            if not src.crs or not src.bounds:
+                return None  # Not a valid GeoTIFF
+
+            bounds = src.bounds
+            geojson = {
+                "type": "FeatureCollection",
+                "features": [{
+                    "type": "Feature",
+                    "geometry": mapping(box(bounds.left, bounds.bottom, bounds.right, bounds.top)),
+                    "properties": {"CRS": str(src.crs)}
+                }]
+            }
+            return geojson
+    except Exception as e:
+        print(f"Error reading geodata: {e}")
+        return None
+
+def preprocess_ndvi(input_data):
+    """Process NDVI files and return processed data with geodata."""
+    geo_data = None
+
+    if isinstance(input_data, str):  # It's a file path
+        file_path = input_data
+        file_name = input_data.lower()
+    else:  # It's an uploaded file (file-like object)
+        with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
+            tmp_file.write(input_data.read())
+            file_path = tmp_file.name
+        file_name = input_data.name.lower()
 
     try:
-        if uploaded_file.filename.lower().endswith('.npy'):
-            ndvi = np.load(tmp_file_path)
-        elif uploaded_file.filename.lower().endswith(('.tif', '.tiff')):
-            with rasterio.open(tmp_file_path) as src:
+        if file_name.endswith('.npy'):
+            ndvi = np.load(file_path)
+        elif file_name.endswith(('.tif', '.tiff')):
+            geo_data = get_geodata(file_path)
+            with rasterio.open(file_path) as src:
                 ndvi = src.read(1).astype(np.float32)
-        
-        # Preserve original values except NaNs
+        else:
+            raise ValueError("Unsupported file format")
+
         valid_mean = np.nanmean(ndvi)
         processed = np.where(np.isnan(ndvi), valid_mean, ndvi)
-        
-        # Maintain original NDVI range [-1, 1]
-        processed = np.clip(processed, -1, 1)
-        resized = cv2.resize(processed, (299, 299))
-        
-        return np.stack([resized]*3, axis=-1)
+        smoothed = cv2.GaussianBlur(processed, (5, 5), 0)
+        resized = cv2.resize(smoothed, (299, 299))
+        processed_data = np.stack([resized]*3, axis=-1)
+
+        return processed_data, geo_data
 
     finally:
-        import os
-        os.unlink(tmp_file_path)
+        if not isinstance(input_data, str):  # Clean up only if we created a temp file
+            os.unlink(file_path)
+
