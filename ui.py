@@ -14,6 +14,9 @@ import rasterio
 # API endpoint configuration
 API_URL = "http://localhost:8000"  
 
+# Class names for mapping class_idx to labels
+CLASS_NAMES = ['Non-Plant', 'Unhealthy', 'Moderate', 'Healthy']
+
 # Session state management
 def init_session_state():
     if "access_token" not in st.session_state:
@@ -245,7 +248,8 @@ def render_login_page():
                         set_authenticated(
                             user_data["user_id"], 
                             user_data["access_token"],
-                            user_data["refresh_token"]
+                            user_data["refresh_token"],
+                            email
                         )
                         st.rerun()
 
@@ -287,16 +291,58 @@ def render_upload_page():
     # Image type selection
     image_type = st.radio("Image Type", ["RGB", "NDVI"], horizontal=True)
     
+    # if uploaded_file is not None:
+    #     # Display preview
+    #     st.subheader("Preview")
+    #     try:
+    #         image = Image.open(uploaded_file)
+    #         st.image(image, caption="Uploaded Image", use_container_width=True)
+    #     except Exception as e:
+    #         st.warning(f"Cannot preview this image format: {str(e)}")
+    #         st.info("NDVI images may not be previewable, but can still be uploaded.")
     if uploaded_file is not None:
-        # Display preview
-        st.subheader("Preview")
-        try:
+        # Preview the uploaded file based on its type
+        file_extension = uploaded_file.name.lower().split('.')[-1]
+        if file_extension in ["jpg", "jpeg", "png"]:
+            # Display JPEG/PNG images directly
             image = Image.open(uploaded_file)
-            st.image(image, caption="Uploaded Image", use_container_width=True)
-        except Exception as e:
-            st.warning(f"Cannot preview this image format: {str(e)}")
-            st.info("NDVI images may not be previewable, but can still be uploaded.")
-        
+            st.image(image, caption="Uploaded Image (RGB)", use_container_width=True)
+        elif file_extension in ["tif", "tiff"]:
+            # Display TIFF files (NDVI or RGB)
+            with io.BytesIO(uploaded_file.getvalue()) as f:
+                with rasterio.open(f) as src:
+                    data = src.read()
+            if data.shape[0] in [3, 4]:  # RGB or RGBA
+                # Convert to (height, width, channels) for display
+                rgb_data = data[:3].transpose(1, 2, 0)  # Take first 3 bands
+                fig, ax = plt.subplots()
+                ax.imshow(rgb_data)
+                ax.set_title("Uploaded Image (RGB TIFF)")
+                ax.axis('off')
+                st.pyplot(fig)
+            else:
+                # Assume single-band NDVI
+                ndvi_display = data[0, :, :] if data.ndim == 3 else data[:, :]
+                fig, ax = plt.subplots()
+                im = ax.imshow(ndvi_display, cmap='RdYlGn', vmin=-1, vmax=1)
+                plt.colorbar(im, label="NDVI")
+                ax.set_title("Uploaded Image (NDVI TIFF)")
+                st.pyplot(fig)
+        elif file_extension == "npy":
+            # Display NPY files (NDVI data)
+            with io.BytesIO(uploaded_file.getvalue()) as f:
+                ndvi_data = np.load(f)
+            # Ensure the data is 2D (height, width)
+            if ndvi_data.ndim > 2:
+                ndvi_data = ndvi_data[0, :, :] if ndvi_data.shape[0] == 1 else ndvi_data[:, :, 0]
+            fig, ax = plt.subplots()
+            im = ax.imshow(ndvi_data, cmap='RdYlGn', vmin=-1, vmax=1)
+            plt.colorbar(im, label="NDVI")
+            ax.set_title("Uploaded Image (NDVI NPY)")
+            st.pyplot(fig)
+        else:
+            st.warning(f"Cannot preview file format: {file_extension}")
+            
         # Reset file pointer
         uploaded_file.seek(0)
         
