@@ -3,7 +3,12 @@ import cv2
 import rasterio
 import tempfile
 import os
+import matplotlib.pyplot as plt
 from rasterio.crs import CRS
+from shapely.geometry import box, mapping
+from streamlit_folium import folium_static
+from branca.colormap import LinearColormap
+import folium
 
 def rgb_to_vari(img):
     """Calculate VARI from RGB image."""
@@ -16,6 +21,12 @@ def rgb_to_vari(img):
 
     vari = (g - r) / denominator
     return np.clip(vari, -1, 1)
+
+ndvi_legend = LinearColormap(
+    colors=['#d73027', '#fee08b', '#ffffbf', '#d9ef8b', '#1a9850'],
+    vmin=-1, vmax=1,
+    caption='NDVI value'
+)
 
 def preprocess_image(img_rgb):
     """Convert RGB image to VARI, resize, and format for model."""
@@ -43,7 +54,40 @@ def get_geodata(file_path):
     except Exception as e:
         print(f"Error reading geodata: {e}")
         return None
+    
+def plot_ndvi_overlay(tiff_path, zoom=14):
+    try:
+        with rasterio.open(tiff_path) as src:
+            ndvi = src.read(1).astype(np.float32)
+            bounds = src.bounds
 
+        norm_ndvi = (ndvi + 1) / 2
+        cmap = plt.get_cmap('RdYlGn')
+        rgba = cmap(norm_ndvi)
+        rgb = (rgba[..., :3] * 255).astype(np.uint8)
+
+        center_lat = (bounds.bottom + bounds.top) / 2
+        center_lon = (bounds.left + bounds.right) / 2
+
+        m = folium.Map(
+            location=[center_lat, center_lon],
+            zoom_start=zoom,
+            tiles='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+            attr='Esri World Imagery'
+        )
+
+        folium.raster_layers.ImageOverlay(
+            image=rgb,
+            bounds=[[bounds.bottom, bounds.left], [bounds.top, bounds.right]],
+            opacity=0.6
+        ).add_to(m)
+
+        ndvi_legend.add_to(m)
+        return m
+    except Exception as e:
+        print(f"Geospatial visualization error: {e}")
+        return None
+    
 def preprocess_ndvi(input_data):
     """Process NDVI files and return processed data with geodata."""
     geo_data = None

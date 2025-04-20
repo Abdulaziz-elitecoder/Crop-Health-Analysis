@@ -10,6 +10,10 @@ import uuid
 import numpy as np
 import matplotlib.pyplot as plt
 import rasterio
+from services.classification import load_model_wrapper , predict
+from model.image_processing import preprocess_image, plot_ndvi_overlay
+from streamlit_folium import folium_static
+import cv2
 
 # API endpoint configuration
 API_URL = "http://localhost:8000"  
@@ -31,6 +35,8 @@ def init_session_state():
         st.session_state.images = []
     if "selected_image" not in st.session_state:
         st.session_state.selected_image = None
+    if "video_capture" not in st.session_state:
+        st.session_state.video_capture = None
 
 def set_authenticated(user_id: str, access_token: str, refresh_token: str, email: str):
     st.session_state.user_id = user_id
@@ -49,6 +55,9 @@ def clear_authentication():
     st.session_state.current_page = "login"
     st.session_state.images = []
     st.session_state.selected_image = None
+    if st.session_state.video_capture is not None:
+        st.session_state.video_capture.release()
+        st.session_state.video_capture = None
 
 # API interaction functions
 def signup_user(email: str, password: str) -> Optional[dict]:
@@ -259,7 +268,7 @@ def render_dashboard():
     # Sidebar navigation
     with st.sidebar:
         st.subheader("Navigation")
-        page = st.radio("Go to", ["Upload Image", "My Images", "Account"])
+        page = st.radio("Go to", ["Upload Image", "My Images", "Account" , "Live Webcam Classification","Live Feed Capture"])
         
         st.divider()
         if st.button("Logout"):
@@ -274,6 +283,10 @@ def render_dashboard():
         render_images_page()
     elif page == "Account":
         render_account_page()
+    elif page == "Live Webcam Classification":
+        render_webcam_page()
+    elif page == "Live Feed Capture":
+        render_live_feed_page()
 
 def render_upload_page():
     st.header("Upload New Image")
@@ -291,15 +304,6 @@ def render_upload_page():
     # Image type selection
     image_type = st.radio("Image Type", ["RGB", "NDVI"], horizontal=True)
     
-    # if uploaded_file is not None:
-    #     # Display preview
-    #     st.subheader("Preview")
-    #     try:
-    #         image = Image.open(uploaded_file)
-    #         st.image(image, caption="Uploaded Image", use_container_width=True)
-    #     except Exception as e:
-    #         st.warning(f"Cannot preview this image format: {str(e)}")
-    #         st.info("NDVI images may not be previewable, but can still be uploaded.")
     if uploaded_file is not None:
         # Preview the uploaded file based on its type
         file_extension = uploaded_file.name.lower().split('.')[-1]
@@ -434,6 +438,7 @@ def render_images_page():
                             if file_type == "ndvi":
                                 # NDVI image (TIFF)
                                 with io.BytesIO(image_content) as f:
+                                    m = plot_ndvi_overlay(f)
                                     with rasterio.open(f) as src:
                                         data = src.read()  # Shape: (bands, height, width)
                                 ndvi_display = data[0, :, :] if data.ndim == 3 else data[:, :]
@@ -442,6 +447,11 @@ def render_images_page():
                                 plt.colorbar(im, label="NDVI")
                                 ax.set_title(title)
                                 st.pyplot(fig)
+                                with io.BytesIO(image_content) as f:
+                                    m = plot_ndvi_overlay(f)
+                                    if m:
+                                        st.subheader("Geospatial Visualization")
+                                        folium_static(m)
                             else:
                                 # RGB image (JPEG/PNG)
                                 image = Image.open(io.BytesIO(image_content))
@@ -501,6 +511,161 @@ def render_images_page():
                             st.session_state.images = get_all_images()
                             st.session_state.selected_image = None
                             st.rerun()
+
+def render_webcam_page():
+    st.header("Live Webcam Classification")
+    camera_image = st.camera_input("Take a picture using your webcam")
+    
+    if camera_image:
+        try:
+            img = Image.open(camera_image)
+            img_rgb = np.array(img)
+            data = preprocess_image(img_rgb)
+    
+            model = load_model_wrapper()
+            class_idx, confidence = predict(model, data)
+    
+            col1, col2 = st.columns(2)
+            with col1:
+                st.image(img_rgb, caption='Captured Image', use_container_width=True)
+                st.write(f"Predicted: {CLASS_NAMES[class_idx]} ({confidence:.1%})")
+
+            with col2:
+                fig, ax = plt.subplots()
+                ndvi_display = data[0, :, :, 0] if data.ndim == 4 else data[:, :, 0]
+                ax.imshow(ndvi_display, cmap='RdYlGn', vmin=-1, vmax=1)
+                ax.set_title(f"{CLASS_NAMES[class_idx]} ({confidence:.1%})")
+                ax.axis('off')
+                st.pyplot(fig)
+    
+        except Exception as e:
+            st.error(f"Error processing webcam image: {e}")
+
+
+def ndvi_calculation(bgr_frame):
+    """
+    Approximate an NDVI-like index from a BGR webcam frame
+    using green and red channels as a proxy.
+    """
+    frame_rgb = cv2.cvtColor(bgr_frame, cv2.COLOR_BGR2RGB)
+    # Extract red and green channels
+    red = frame_rgb[:, :, 0].astype(np.float32)
+    green = frame_rgb[:, :, 1].astype(np.float32)
+    # Compute pseudo-NDVI: (green - red) / (green + red)
+    denominator = green + red + 1e-8  # Avoid division by zero
+    ndvi = (green - red) / denominator
+    # Clamp to [-1, 1] to ensure valid NDVI range
+    ndvi = np.clip(ndvi, -1.0, 1.0)
+    return ndvi
+
+def predict_image(model, data: np.ndarray) -> tuple:
+    """
+    Predict the class and confidence for the input data.
+    Expects data in [0, 1] with shape (299, 299, 3).
+    """
+    # Add batch dimension
+    data = np.expand_dims(data, axis=0)  # Shape: (1, 299, 299, 3)
+    # If model expects [-1, 1], uncomment the following:
+    # data = (data * 2.0) - 1.0
+    # Run prediction
+    predictions = model.predict(data)
+    class_idx = np.argmax(predictions[0])
+    confidence = predictions[0][class_idx]
+    return CLASS_NAMES[class_idx], confidence
+
+def preprocess_for_model(ndvi):
+    """
+    Resize, replace NaNs, normalize to [0,1],
+    and stack into 3 channels for Inception
+    """
+    TARGET_SIZE = (299, 299)  # (height, width)
+    resized = cv2.resize(ndvi, TARGET_SIZE)
+    # Replace NaNs with a safe value (e.g., -2, outside typical NDVI range)
+    safe = np.nan_to_num(resized, nan=-2)
+    # Normalize to [0, 1]
+    norm = (safe - safe.min()) / (safe.max() - safe.min() + 1e-8)
+    # Explicitly clamp to [0, 1] to avoid numerical issues
+    norm = np.clip(norm, 0.0, 1.0)
+    # Stack into 3 channels
+    stacked = np.stack([norm, norm, norm], axis=-1).astype(np.float32)
+    return stacked
+
+def render_live_feed_page():
+    st.header("Live Feed Capture")
+    
+    # Initialize video capture if not already done
+    if st.session_state.video_capture is None:
+        st.session_state.video_capture = cv2.VideoCapture(0)
+        if not st.session_state.video_capture.isOpened():
+            st.error("Could not open webcam. Please ensure a webcam is connected and accessible.")
+            st.session_state.video_capture = None
+            return
+    
+    st.write("Click the button below to capture and classify a frame from the webcam.")
+    
+    # Button to capture and process a frame
+    if st.button("Capture Frame"):
+        try:
+            # Read frame from webcam
+            ret, frame = st.session_state.video_capture.read()
+            if not ret:
+                st.error("Frame capture failed. Please try again or check your webcam.")
+                return
+            
+            # Crop to square for consistency
+            h, w = frame.shape[:2]
+            m = min(h, w)
+            frame_sq = frame[(h-m)//2:(h+m)//2, (w-m)//2:(w+m)//2]
+            
+            # Calculate NDVI
+            ndvi = ndvi_calculation(frame_sq)
+            # Preprocess for model
+            processed = preprocess_for_model(ndvi)
+            # Load model and predict
+            model = load_model_wrapper()
+            label, conf = predict(model, processed)
+            
+            # Choose text color by label
+            colors = {
+                'Non-Plant': (0, 0, 255),  # Red
+                'Unhealthy': (0, 165, 255),  # Orange
+                'Moderate': (255, 255, 0),  # Yellow
+                'Healthy': (0, 255, 0)  # Green
+            }
+            color = colors.get(label, (255, 255, 255))  # Default to white
+            
+            # Overlay label and confidence on original frame_sq (not processed)
+            frame_display = frame_sq.copy()  # Work on a copy to preserve original
+            text = f"{CLASS_NAMES[label]}: ({conf*100:.0f}%)"
+            cv2.putText(frame_display, text, (20, 50),
+                        cv2.FONT_HERSHEY_SIMPLEX, 1, color, 2)
+            
+            # Convert frame to RGB for Streamlit display (OpenCV uses BGR)
+            frame_rgb = cv2.cvtColor(frame_display, cv2.COLOR_BGR2RGB)
+            
+            # Display the frame
+            st.image(frame_rgb, caption="Captured Frame", use_container_width=True)
+            
+            # Optionally display NDVI visualization
+            st.subheader("NDVI Visualization")
+            fig, ax = plt.subplots()
+            im = ax.imshow(ndvi, cmap='RdYlGn', vmin=-1, vmax=1)
+            plt.colorbar(im, label="NDVI")
+            ax.set_title("Pseudo-NDVI")
+            ax.axis('off')
+            st.pyplot(fig)
+            
+        except Exception as e:
+            st.error(f"Error processing live feed frame: {str(e)}")
+    
+    # Button to stop the live feed
+    if st.button("Stop Webcam"):
+        if st.session_state.video_capture is not None:
+            st.session_state.video_capture.release()
+            st.session_state.video_capture = None
+            st.success("Webcam stopped.")
+            st.rerun()
+
 
 def render_account_page():
     st.header("Account Information")
