@@ -213,7 +213,7 @@ def get_classification_result(image_id):
 
 # UI Components
 def render_login_page():
-    st.title("Crop Health Analysis")
+    st.title("Crop Health Analysis User")
     st.subheader("Login to your account")
     
     tab1, tab2 = st.tabs(["Sign In", "Sign Up"])
@@ -263,7 +263,7 @@ def render_login_page():
                         st.rerun()
 
 def render_dashboard():
-    st.title("Crop Health Analysis Dashboard")
+    st.title("Crop Health Analysis Dashboard(User)")
     
     # Sidebar navigation
     with st.sidebar:
