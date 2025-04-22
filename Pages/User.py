@@ -524,6 +524,7 @@ def render_webcam_page():
     
             model = load_model_wrapper()
             class_idx, confidence = predict(model, data)
+            print(class_idx, confidence)
     
             col1, col2 = st.columns(2)
             with col1:

@@ -7,7 +7,7 @@ def get_base64_image(image_path):
         return base64.b64encode(img_file.read()).decode()
 
 # Path to your local background image
-img_path = "model\Crop health analysis_\green.jpg"  # Make sure this image is in the same directory
+img_path = "pages\green.jpg"  # Make sure this image is in the same directory
 img_base64 = get_base64_image(img_path)
 
 # Set page config
@@ -77,11 +77,11 @@ st.markdown('<div class="button-container">', unsafe_allow_html=True)
 col1, col2 = st.columns([1, 1], gap="large")
 
 with col1:
-    if st.button("🙎‍♂️  User"):
-        st.switch_page("Pages/ui.py")
+    if st.button("🙎‍♂️ User"):
+        st.switch_page("pages/User.py")
 
 with col2:
     if st.button("👷 Admin"):
-        st.switch_page("Pages/Admin.py")
+        st.switch_page("pages/Admin.py")
 
 st.markdown('</div>', unsafe_allow_html=True)

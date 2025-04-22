@@ -2,7 +2,7 @@ from database.supabase import get_supabase
 from pydantic import EmailStr
 from uuid import UUID
 
-async def signup(email: EmailStr, password: str) -> dict:
+async def signup(email: EmailStr, password: str,is_admin: bool = False) -> dict:
     supabase = await get_supabase()
     try:
         # Sign up with Supabase Auth
@@ -15,7 +15,8 @@ async def signup(email: EmailStr, password: str) -> dict:
         user_data = {
             "id": str(UUID(user_id)),
             "auth_user_id": user_id,
-            "email": email
+            "email": email,
+            "is_admin": is_admin
         }
         response = await supabase.table("users").insert(user_data).execute()
         if not response.data:

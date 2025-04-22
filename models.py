@@ -11,6 +11,7 @@ class Token(BaseModel):
 class UserSignUp(BaseModel):
     email: EmailStr
     password: str
+    is_admin: bool = False  # Add is_admin flag, default to False
 
 class UserSignIn(BaseModel):
     email: EmailStr
@@ -19,12 +20,15 @@ class UserSignIn(BaseModel):
 class UserCreate(BaseModel):
     email: EmailStr
     password: str
+    is_admin: bool = False  # Add is_admin flag, default to False
+
 
 class UserResponse(BaseModel):
     id: UUID
     auth_user_id: UUID 
     email: EmailStr
     created_at: datetime
+    is_admin: bool = False  # Add is_admin flag, default to False
 
     class Config:
         from_attributes = True
